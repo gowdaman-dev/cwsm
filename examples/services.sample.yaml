@@ -1,0 +1,50 @@
+# Sample config for chronexa-ws-manager --config
+#
+# Usage:
+#   chronexa-ws-manager.exe create   --config services.yaml
+#   chronexa-ws-manager.exe edit     --config services.yaml
+#   chronexa-ws-manager.exe start    --config services.yaml
+#   chronexa-ws-manager.exe stop     --config services.yaml
+#   chronexa-ws-manager.exe restart  --config services.yaml
+#   chronexa-ws-manager.exe delete   --config services.yaml
+#   chronexa-ws-manager.exe query    --config services.yaml
+#
+# "create" skips any service that already exists and reports it as such;
+# it never overwrites an existing service. Use "edit" to update one.
+
+services:
+  # A service running under a wrapper (NSSM/WinSW) that hosts a real app —
+  # see the Troubleshooting section of the usage guide for why a plain
+  # console app/script can't be registered directly with sc.exe.
+  - name: ChronexaApiGateway
+    path: "C:\\Chronexa\\wrappers\\nssm.exe"
+    args: "ChronexaApiGateway"
+    logdir: "C:\\ProgramData\\Chronexa\\logs"
+    start: auto
+    account:
+      type: LocalSystem
+
+  - name: ChronexaWorker
+    path: "C:\\Chronexa\\wrappers\\nssm.exe"
+    args: "ChronexaWorker --queue default"
+    logdir: "C:\\ProgramData\\Chronexa\\logs"
+    start: delayed-auto
+    account:
+      type: NetworkService
+
+  # Custom logon account example. Keep the password out of source control —
+  # ${CHRONEXA_SVC_PASSWORD} is expanded from the environment at run time.
+  - name: ChronexaScheduler
+    path: "C:\\Chronexa\\wrappers\\nssm.exe"
+    args: "ChronexaScheduler"
+    logdir: "C:\\ProgramData\\Chronexa\\logs"
+    start: auto
+    account:
+      type: Custom
+      username: ".\\svc_chronexa"
+      password: "${CHRONEXA_SVC_PASSWORD}"
+
+  # Manual-start service, no dedicated log directory.
+  - name: ChronexaMaintenanceTool
+    path: "C:\\Chronexa\\tools\\maintenance.exe"
+    start: demand
