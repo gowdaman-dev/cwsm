@@ -9,7 +9,7 @@ const {
   scQuery,
   serviceExists,
 } = require('./sc');
-const { setServiceLogDir } = require('./env');
+const { resolveServiceLogDir } = require('./env');
 const { autoStartIfNeeded } = require('./autostart');
 
 function ok(name, message) {
@@ -22,17 +22,17 @@ function fail(name, message) {
   console.log(kleur.red(`✘ ${name}`) + kleur.dim(` — ${message}`));
 }
 
-async function withLogDir(service, opts) {
-  if (!service.logRoot) return;
-  const { logDir } = await setServiceLogDir(service.name, service.logRoot, opts);
-  console.log(kleur.dim(`    log directory: ${logDir}`));
+function withResolvedLogDir(service) {
+  if (!service.logRoot) return service;
+  return { ...service, logDir: resolveServiceLogDir(service.logRoot, service.name) };
 }
 
 async function runConfigCreate(configPath, opts) {
   const services = loadConfig(configPath);
   console.log(kleur.bold(`Applying "create" to ${services.length} service(s) from ${configPath}`));
   let failures = 0;
-  for (const service of services) {
+  for (const raw of services) {
+    const service = withResolvedLogDir(raw);
     try {
       const exists = await serviceExists(service.name, opts);
       if (exists) {
@@ -40,7 +40,7 @@ async function runConfigCreate(configPath, opts) {
         continue;
       }
       await scCreate(service, opts);
-      await withLogDir(service, opts);
+      if (service.logDir) console.log(kleur.dim(`    log directory: ${service.logDir}`));
       ok(service.name, exists === null ? 'would be created (dry-run)' : 'created');
       await autoStartIfNeeded(service.name, service.startType, opts);
     } catch (err) {
@@ -55,10 +55,11 @@ async function runConfigEdit(configPath, opts) {
   const services = loadConfig(configPath);
   console.log(kleur.bold(`Applying "edit" to ${services.length} service(s) from ${configPath}`));
   let failures = 0;
-  for (const service of services) {
+  for (const raw of services) {
+    const service = withResolvedLogDir(raw);
     try {
       await scConfig(service, opts);
-      await withLogDir(service, opts);
+      if (service.logDir) console.log(kleur.dim(`    log directory: ${service.logDir}`));
       ok(service.name, 'updated to match config');
       await autoStartIfNeeded(service.name, service.startType, opts);
     } catch (err) {

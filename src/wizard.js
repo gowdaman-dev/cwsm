@@ -1,9 +1,9 @@
 const prompts = require('prompts');
 const kleur = require('kleur');
 const { scCreate, scConfig, scDelete, scStart, scStop, scQuery } = require('./sc');
-const { setServiceLogDir, resolveServiceLogDir } = require('./env');
+const { resolveServiceLogDir } = require('./env');
 const { promptLogon } = require('./logon');
-const { autoStartIfNeeded } = require('./autostart');
+const { autoStartIfNeeded, START_FAILURE_HINT } = require('./autostart');
 
 const onCancel = () => {
   console.log(kleur.yellow('\nCancelled. No changes were made.'));
@@ -90,7 +90,7 @@ async function runCreateWizard({ dryRun } = {}) {
       },
       {
         type: 'text',
-        name: 'binPath',
+        name: 'target',
         message: 'Full path to the service executable',
         validate: (v) => (v && v.trim().length > 0 ? true : 'Required'),
       },
@@ -98,6 +98,11 @@ async function runCreateWizard({ dryRun } = {}) {
         type: 'text',
         name: 'args',
         message: 'Startup arguments (leave blank for none)',
+      },
+      {
+        type: 'text',
+        name: 'cwd',
+        message: 'Working directory (leave blank to use the executable\'s own folder)',
       },
       {
         type: 'confirm',
@@ -109,10 +114,9 @@ async function runCreateWizard({ dryRun } = {}) {
     { onCancel }
   );
 
-  let logRoot;
   let logDir;
   if (basics.wantsLogDir) {
-    ({ logRoot } = await prompts(
+    const { logRoot } = await prompts(
       {
         type: 'text',
         name: 'logRoot',
@@ -120,7 +124,7 @@ async function runCreateWizard({ dryRun } = {}) {
         validate: (v) => (v && v.trim().length > 0 ? true : 'Required'),
       },
       { onCancel }
-    ));
+    );
     logDir = resolveServiceLogDir(logRoot, basics.name);
   }
 
@@ -150,20 +154,26 @@ async function runCreateWizard({ dryRun } = {}) {
   await confirmAndRun(
     [
       ['Name', basics.name],
-      ['Path', basics.binPath],
+      ['Path', basics.target],
       ['Args', basics.args || kleur.dim('(none)')],
+      ['Workdir', basics.cwd || kleur.dim('(executable\'s folder)')],
       ['Log dir', logDir || kleur.dim('(none)')],
       ['Start type', startType],
       ['Account', logon.account || 'LocalSystem'],
     ],
     async () => {
       await scCreate(
-        { name: basics.name, binPath: basics.binPath, args: basics.args, startType, ...logon },
+        {
+          name: basics.name,
+          target: basics.target,
+          args: basics.args,
+          cwd: basics.cwd,
+          logDir,
+          startType,
+          ...logon,
+        },
         { dryRun }
       );
-      if (logRoot) {
-        await setServiceLogDir(basics.name, logRoot, { dryRun });
-      }
       console.log(kleur.green(`\n✔ Service "${basics.name}" created.`));
       await autoStartIfNeeded(basics.name, startType, { dryRun });
     }
@@ -189,8 +199,10 @@ async function runEditWizard({ dryRun } = {}) {
       name: 'fields',
       message: 'Which fields do you want to change? (space to select, enter to confirm)',
       choices: [
-        { title: 'Executable path / arguments', value: 'path' },
-        { title: 'Log directory', value: 'logdir' },
+        {
+          title: 'Launch command (path / arguments / working directory / log directory)',
+          value: 'launch',
+        },
         { title: 'Startup type', value: 'start' },
         { title: 'Logon account', value: 'logon' },
       ],
@@ -200,31 +212,33 @@ async function runEditWizard({ dryRun } = {}) {
   );
 
   const changes = { name };
-  let logRoot;
   let logDir;
 
-  if (fields.includes('path')) {
+  if (fields.includes('launch')) {
+    // The service's full launch command is one atomic string, so the
+    // executable path is always required here — you can't update just the
+    // args/workdir/logdir in isolation without knowing what to keep for path.
     const answers = await prompts(
       [
-        { type: 'text', name: 'binPath', message: 'New executable path' },
+        {
+          type: 'text',
+          name: 'target',
+          message: 'Executable path (required to rebuild the launch command)',
+          validate: (v) => (v && v.trim().length > 0 ? true : 'Required'),
+        },
         { type: 'text', name: 'args', message: 'New startup arguments (blank for none)' },
+        { type: 'text', name: 'cwd', message: 'New working directory (blank for the executable\'s own folder)' },
+        { type: 'text', name: 'logRoot', message: 'New log root directory (blank for none)' },
       ],
       { onCancel }
     );
-    changes.binPath = answers.binPath;
+    changes.target = answers.target;
     changes.args = answers.args;
-  }
-
-  if (fields.includes('logdir')) {
-    ({ logRoot } = await prompts(
-      {
-        type: 'text',
-        name: 'logRoot',
-        message: 'New log root directory (a subfolder named after the service will be created under it)',
-      },
-      { onCancel }
-    ));
-    logDir = resolveServiceLogDir(logRoot, name);
+    changes.cwd = answers.cwd;
+    if (answers.logRoot) {
+      logDir = resolveServiceLogDir(answers.logRoot, name);
+      changes.logDir = logDir;
+    }
   }
 
   if (fields.includes('start')) {
@@ -248,17 +262,15 @@ async function runEditWizard({ dryRun } = {}) {
   await confirmAndRun(
     [
       ['Name', name],
-      ['Path', changes.binPath],
+      ['Path', changes.target],
       ['Args', changes.args],
+      ['Workdir', changes.cwd],
       ['Log dir', logDir],
       ['Start type', changes.startType],
       ['Account', logon.account],
     ],
     async () => {
       await scConfig({ ...changes, ...logon }, { dryRun });
-      if (logRoot) {
-        await setServiceLogDir(name, logRoot, { dryRun });
-      }
       console.log(kleur.green(`\n✔ Service "${name}" updated.`));
       if (changes.startType === 'auto') {
         await autoStartIfNeeded(name, changes.startType, { dryRun });
@@ -341,14 +353,7 @@ async function runStartWizard({ dryRun } = {}) {
     console.log(kleur.green(`\n✔ Service "${name}" started.`));
   } catch (err) {
     console.error(kleur.red(`\n${err.message}`));
-    console.error(
-      kleur.yellow(
-        'If it hangs on "Starting..." then fails, the target executable likely does not ' +
-          'implement the Windows Service Control API (StartServiceCtrlDispatcher). A plain ' +
-          'console app/script cannot run directly as a service — wrap it with something like ' +
-          'NSSM or WinSW, or make the binary a proper Windows service.'
-      )
-    );
+    console.error(kleur.yellow(START_FAILURE_HINT));
   }
 }
 

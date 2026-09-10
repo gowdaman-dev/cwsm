@@ -1,4 +1,5 @@
 const { execFile } = require('child_process');
+const { resolveHostExePath } = require('./hostAssets');
 
 const START_TYPES = {
   auto: 'auto',
@@ -31,13 +32,26 @@ function runNative(cmd, args, { dryRun = false } = {}) {
   });
 }
 
-function buildBinPath(binPath, args) {
-  const quotedPath = `"${binPath}"`;
-  return args ? `${quotedPath} ${args}` : quotedPath;
+function quote(value) {
+  return `"${String(value).replace(/"/g, '\\"')}"`;
 }
 
-function scCreate({ name, binPath, args, startType, account, password }, opts) {
-  const argv = ['create', name, 'binPath=', buildBinPath(binPath, args)];
+// Every service this tool creates runs under our own service host, which
+// implements the Windows Service Control API and supervises the real
+// target as a plain child process. This is what makes `create` work
+// uniformly for any executable or script, not just ones that were built
+// to hook into the Service Control Manager themselves.
+function buildHostBinPath({ name, target, args, cwd, logDir }) {
+  const hostExePath = resolveHostExePath();
+  const parts = [quote(hostExePath), '--service-name', quote(name), '--target', quote(target)];
+  if (args) parts.push('--args', quote(args));
+  if (cwd) parts.push('--cwd', quote(cwd));
+  if (logDir) parts.push('--logdir', quote(logDir));
+  return parts.join(' ');
+}
+
+function scCreate({ name, target, args, cwd, logDir, startType, account, password }, opts) {
+  const argv = ['create', name, 'binPath=', buildHostBinPath({ name, target, args, cwd, logDir })];
   argv.push('start=', START_TYPES[startType] || START_TYPES.demand);
   if (account) {
     argv.push('obj=', account);
@@ -48,10 +62,10 @@ function scCreate({ name, binPath, args, startType, account, password }, opts) {
   return runNative('sc', argv, opts);
 }
 
-function scConfig({ name, binPath, args, startType, account, password }, opts) {
+function scConfig({ name, target, args, cwd, logDir, startType, account, password }, opts) {
   const argv = ['config', name];
-  if (binPath) {
-    argv.push('binPath=', buildBinPath(binPath, args));
+  if (target) {
+    argv.push('binPath=', buildHostBinPath({ name, target, args, cwd, logDir }));
   }
   if (startType) {
     argv.push('start=', START_TYPES[startType] || startType);

@@ -4,10 +4,11 @@ const { scStart } = require('./sc');
 const AUTO_START_DELAY_MS = 2000;
 
 const START_FAILURE_HINT =
-  'If it hangs on "Starting..." then fails, the target executable likely does not ' +
-  'implement the Windows Service Control API (StartServiceCtrlDispatcher). A plain ' +
-  'console app/script cannot run directly as a service — wrap it with something like ' +
-  'NSSM or WinSW, or make the binary a proper Windows service.';
+  'The service failed to start. Every service this tool creates runs under its own ' +
+  'built-in service host, so this usually means the target executable itself failed ' +
+  '(wrong --path, missing dependency, bad --args/--workdir) rather than a Windows ' +
+  'Service Control problem. Check the log directory (stdout.log / stderr.log) if one ' +
+  'was configured, or run the target directly from a console to see its own error.';
 
 function delay(ms) {
   return new Promise((resolve) => setTimeout(resolve, ms));

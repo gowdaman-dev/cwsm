@@ -3,3 +3,7 @@ dist/
 *.log
 docs/usage-guide.html
 docs/*.pdf
+assets/*.exe
+service-host/ChronexaServiceHost/bin/
+service-host/ChronexaServiceHost/obj/
+service-host/ChronexaServiceHost/publish/

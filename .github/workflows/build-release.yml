@@ -20,16 +20,34 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: "8.0.x"
+
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
           node-version: "18"
 
+      - name: Clean previous build output
+        run: rm -rf dist service-host/ChronexaServiceHost/publish assets
+
+      - name: Build service host
+        working-directory: service-host/ChronexaServiceHost
+        run: |
+          dotnet publish -c Release -r win-x64 --self-contained true \
+            -p:PublishSingleFile=true -p:IncludeNativeLibrariesForSelfExtract=true \
+            -p:EnableCompressionInSingleFile=true \
+            -o ./publish
+
+      - name: Copy host into CLI assets
+        run: |
+          mkdir -p assets
+          cp service-host/ChronexaServiceHost/publish/chronexa-service-host.exe assets/chronexa-service-host.exe
+
       - name: Install dependencies
         run: npm ci
-
-      - name: Clean previous build output
-        run: rm -rf dist
 
       - name: Build Windows exe
         run: npm run build:exe

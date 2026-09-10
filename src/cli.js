@@ -4,7 +4,7 @@ const { Command } = require('commander');
 const kleur = require('kleur');
 const { ensureWindows } = require('./platform-guard');
 const { scCreate, scConfig, scDelete, scStart, scStop, scQuery } = require('./sc');
-const { setServiceLogDir } = require('./env');
+const { resolveServiceLogDir } = require('./env');
 const { resolveLogonFromFlags } = require('./logon');
 const wizard = require('./wizard');
 const configRunner = require('./configRunner');
@@ -46,7 +46,8 @@ program
   .option('-n, --name <name>', 'service name')
   .option('-p, --path <path>', 'full path to the service executable')
   .option('-a, --args <args>', 'startup arguments passed to the executable')
-  .option('-l, --logdir <dir>', 'log root; service writes to <dir>\\<name> (LOG_DIR env var)')
+  .option('-w, --workdir <dir>', 'working directory the executable runs from')
+  .option('-l, --logdir <dir>', 'log root; service writes to <dir>\\<name> (LOG_DIR env var + stdout/stderr files)')
   .option(
     '-s, --start <type>',
     'startup type: auto | delayed-auto | demand | disabled',
@@ -73,15 +74,21 @@ program
       return;
     }
     const logon = resolveLogonFromFlags(opts);
+    const logDir = opts.logdir ? resolveServiceLogDir(opts.logdir, opts.name) : undefined;
     try {
       await scCreate(
-        { name: opts.name, binPath: opts.path, args: opts.args, startType: opts.start, ...logon },
+        {
+          name: opts.name,
+          target: opts.path,
+          args: opts.args,
+          cwd: opts.workdir,
+          logDir,
+          startType: opts.start,
+          ...logon,
+        },
         { dryRun }
       );
-      if (opts.logdir) {
-        const { logDir } = await setServiceLogDir(opts.name, opts.logdir, { dryRun });
-        console.log(kleur.dim(`  Log directory: ${logDir}`));
-      }
+      if (logDir) console.log(kleur.dim(`  Log directory: ${logDir}`));
       console.log(kleur.green(`✔ Service "${opts.name}" created.`));
       await autoStartIfNeeded(opts.name, opts.start, { dryRun });
     } catch (err) {
@@ -96,7 +103,8 @@ program
   .option('-n, --name <name>', 'service name')
   .option('-p, --path <path>', 'new executable path')
   .option('-a, --args <args>', 'new startup arguments')
-  .option('-l, --logdir <dir>', 'new log root; service writes to <dir>\\<name> (LOG_DIR env var)')
+  .option('-w, --workdir <dir>', 'new working directory the executable runs from')
+  .option('-l, --logdir <dir>', 'new log root; service writes to <dir>\\<name> (LOG_DIR env var + stdout/stderr files)')
   .option('-s, --start <type>', 'new startup type: auto | delayed-auto | demand | disabled')
   .option('--account <account>', 'logon account: LocalSystem | NetworkService | LocalService | DOMAIN\\user')
   .option('--username <username>', 'alias for a custom --account')
@@ -118,22 +126,33 @@ program
       process.exitCode = 1;
       return;
     }
+    if ((opts.args || opts.workdir || opts.logdir) && !opts.path) {
+      console.error(
+        kleur.red(
+          'Error: --path is required whenever --args, --workdir, or --logdir is set, since the ' +
+            "service's full launch command is rebuilt together (pass the executable's existing " +
+            'path unchanged if you only meant to update one of the others).'
+        )
+      );
+      process.exitCode = 1;
+      return;
+    }
     const logon = resolveLogonFromFlags(opts);
+    const logDir = opts.logdir ? resolveServiceLogDir(opts.logdir, opts.name) : undefined;
     try {
       await scConfig(
         {
           name: opts.name,
-          binPath: opts.path,
+          target: opts.path,
           args: opts.args,
+          cwd: opts.workdir,
+          logDir,
           startType: opts.start,
           ...logon,
         },
         { dryRun }
       );
-      if (opts.logdir) {
-        const { logDir } = await setServiceLogDir(opts.name, opts.logdir, { dryRun });
-        console.log(kleur.dim(`  Log directory: ${logDir}`));
-      }
+      if (logDir) console.log(kleur.dim(`  Log directory: ${logDir}`));
       console.log(kleur.green(`✔ Service "${opts.name}" updated.`));
       if (opts.start === 'auto') {
         await autoStartIfNeeded(opts.name, opts.start, { dryRun });

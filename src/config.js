@@ -51,8 +51,9 @@ function normalizeService(entry, idx, filePath) {
 
   return {
     name,
-    binPath: entry.path,
+    target: entry.path,
     args: entry.args !== undefined ? String(entry.args) : undefined,
+    cwd: entry.workdir || undefined,
     logRoot: entry.logdir || undefined,
     startType: start,
     account,
