@@ -62,14 +62,14 @@ jobs:
           Write-Host "== query (expect RUNNING) =="
           $status = & $exe query -n $svc
           $status | Write-Host
-          if ($status -notmatch "RUNNING") { throw "service did not reach RUNNING state" }
+          if (-not ($status -join "`n" | Select-String "RUNNING")) { throw "service did not reach RUNNING state" }
 
           Write-Host "== restart =="
           & $exe restart -n $svc
           if ($LASTEXITCODE -ne 0) { throw "restart failed" }
           Start-Sleep -Seconds 2
           $status = & $exe query -n $svc
-          if ($status -notmatch "RUNNING") { throw "service did not reach RUNNING state after restart" }
+          if (-not ($status -join "`n" | Select-String "RUNNING")) { throw "service did not reach RUNNING state after restart" }
 
           Write-Host "== stop =="
           & $exe stop -n $svc
