@@ -29,7 +29,10 @@ that were purpose-built as Windows services.
 - [Logon accounts](#logon-accounts)
 - [Log directories](#log-directories)
 - [Working directory](#working-directory)
+- [Example: running a Node.js / Next.js app as a service](#example-running-a-nodejs--nextjs-app-as-a-service)
 - [Auto-start behavior](#auto-start-behavior)
+- [Restart timing](#restart-timing)
+- [Known limitations](#known-limitations)
 - [Troubleshooting](#troubleshooting)
 - [Safety notes](#safety-notes)
 - [Global options](#global-options)
@@ -293,6 +296,41 @@ This flag is entirely optional; omit it if the service doesn't need dedicated lo
 relative paths (config files, `require`/`import` resolution, relative log paths of its own). If
 omitted, it defaults to the folder containing the `--path` executable.
 
+## Example: running a Node.js / Next.js app as a service
+
+`--path` is launched directly by the service host (no shell involved, so it can capture
+stdout/stderr cleanly) — which means it must point at a real executable, **not** a `.cmd`/`.bat`
+file. Pointing `--path` straight at `npm.cmd` will fail to launch, since batch files aren't
+executables and need `cmd.exe` to interpret them. Two options:
+
+**Go through `cmd.exe` explicitly** (keeps `npm run start`):
+
+```
+chronexa-ws-manager.exe create ^
+  --name MyNextApp ^
+  --path "C:\Windows\System32\cmd.exe" ^
+  --args "/d /c npm run start" ^
+  --workdir "C:\path\to\your-nextjs-project" ^
+  --start auto
+```
+
+**Or call `node.exe` directly on Next's binary** (recommended — one less process hop, so `sc stop`
+cleans up the actual server process directly instead of through npm's wrapper):
+
+```
+chronexa-ws-manager.exe create ^
+  --name MyNextApp ^
+  --path "C:\Program Files\nodejs\node.exe" ^
+  --args "node_modules\next\dist\bin\next start" ^
+  --workdir "C:\path\to\your-nextjs-project" ^
+  --start auto
+```
+
+Either way, this runs the actual **production** server — `next start` always serves the prebuilt
+`.next` output, not the dev server. Run `next build` in that project first; `next start` doesn't
+build on the fly, and if the build is missing it exits immediately (check `stdout.log`/`stderr.log`
+if you set `--logdir`, or run the command manually once to see the error directly).
+
 ## Auto-start behavior
 
 Windows only brings a `start=auto` service up on the **next boot** — `sc create`/`sc config` alone
@@ -300,6 +338,25 @@ won't start it immediately. To make `--start auto` actually mean "running now", 
 seconds after a successful `create` or `edit` (when `start` is `auto`) and then issues `sc start`
 itself. This applies in flag mode, the interactive wizard, and `--config` bulk mode alike. In
 `--dry-run` mode the wait is skipped and the would-be `sc start` command is printed instead.
+
+## Restart timing
+
+`sc stop` only *requests* the stop and returns immediately — the service is typically still
+`STOP_PENDING` (or briefly still `RUNNING`) at that point. `restart` waits for the service to
+actually reach `STOPPED` (polling `sc query` for up to 15s) before issuing `sc start`; starting
+right after `sc stop` without waiting races the Service Control Manager and fails with error 1056
+("An instance of the service is already running"). This wait applies in flag mode, the interactive
+wizard, and `--config` bulk mode alike, and is skipped in `--dry-run` mode.
+
+## Known limitations
+
+- **No custom environment variables yet.** The service host only sets `LOG_DIR` (when `--logdir` is
+  used) on the child process. If your target reads other env vars at runtime (e.g. `PORT`), set them
+  as machine/user environment variables ahead of time, or bake them into your app's own config —
+  there's currently no `--env` flag to pass arbitrary variables through the CLI.
+- **`--path` must be a real executable**, not a `.cmd`/`.bat` file — see
+  [the Node.js / Next.js example](#example-running-a-nodejs--nextjs-app-as-a-service) above for the
+  workaround.
 
 ## Troubleshooting
 

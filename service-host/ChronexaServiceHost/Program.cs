@@ -4,7 +4,7 @@ using Microsoft.Extensions.Hosting;
 
 if (args.Length == 1 && (args[0] == "--version" || args[0] == "-v"))
 {
-    Console.WriteLine("chronexa-service-host v1.0.0");
+    Console.WriteLine("chronexa-service-host v1.0.1");
     return 0;
 }
 

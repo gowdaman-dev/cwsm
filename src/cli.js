@@ -14,7 +14,7 @@ ensureWindows();
 
 const program = new Command();
 
-const VERSION = '1.0.0';
+const VERSION = '1.0.1';
 
 program
   .name('chronexa-ws-manager')

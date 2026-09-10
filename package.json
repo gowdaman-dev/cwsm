@@ -1,6 +1,6 @@
 {
   "name": "chronexa-ws-manager",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "description": "CLI to create, edit, and delete Windows services via sc.exe",
   "main": "src/cli.js",
   "bin": {
