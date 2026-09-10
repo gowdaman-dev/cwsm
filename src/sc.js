@@ -16,11 +16,14 @@ function runNative(cmd, args, { dryRun = false } = {}) {
   return new Promise((resolve, reject) => {
     execFile(cmd, args, { windowsHide: true }, (error, stdout, stderr) => {
       if (error) {
-        reject(
-          new Error(
-            `Command failed: ${label}\n${(stderr || error.message || '').trim()}`
-          )
-        );
+        // sc.exe writes its actual failure reason (e.g. "FAILED 1053: ...")
+        // to stdout, not stderr — surface both instead of just error.message,
+        // which for a non-zero exit with empty stderr is just "Command failed: ...".
+        const detail = [stdout, stderr]
+          .map((s) => (s || '').trim())
+          .filter(Boolean)
+          .join('\n');
+        reject(new Error(`Command failed: ${label}${detail ? `\n${detail}` : ''}`));
         return;
       }
       resolve({ stdout, stderr });
