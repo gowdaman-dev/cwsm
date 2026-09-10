@@ -3,7 +3,7 @@
 const { Command } = require('commander');
 const kleur = require('kleur');
 const { ensureWindows } = require('./platform-guard');
-const { scCreate, scConfig, scDelete, scStart, scStop, scQuery } = require('./sc');
+const { scCreate, scConfig, scDelete, scStart, scStop, scQuery, scWaitForStopped } = require('./sc');
 const { resolveServiceLogDir } = require('./env');
 const { resolveLogonFromFlags } = require('./logon');
 const wizard = require('./wizard');
@@ -274,6 +274,7 @@ program
       } catch (_) {
         // Already stopped — fine to continue to start.
       }
+      await scWaitForStopped({ name: opts.name }, { dryRun });
       await scStart({ name: opts.name }, { dryRun });
       console.log(kleur.green(`✔ Service "${opts.name}" restarted.`));
     } catch (err) {

@@ -99,6 +99,26 @@ function scQueryConfig({ name }, opts) {
   return runNative('sc', ['qc', name], opts);
 }
 
+// `sc stop` only requests the stop and returns immediately (the service is
+// typically still STOP_PENDING/RUNNING) — starting it again right away, as
+// `restart` does, races the SCM and fails with 1056 "already running".
+// Poll until the service actually reaches STOPPED (or gives up after the
+// timeout, letting the caller's next command surface whatever's wrong).
+async function scWaitForStopped({ name }, opts = {}, { timeoutMs = 15000, intervalMs = 300 } = {}) {
+  if (opts.dryRun) return;
+  const deadline = Date.now() + timeoutMs;
+  while (Date.now() < deadline) {
+    let stdout = '';
+    try {
+      ({ stdout } = await scQuery({ name }, opts));
+    } catch (_) {
+      return; // no longer queryable — nothing more to wait for
+    }
+    if (/STATE\s*:\s*\d+\s*STOPPED/.test(stdout)) return;
+    await new Promise((resolve) => setTimeout(resolve, intervalMs));
+  }
+}
+
 // Real existence check against the live system (never useful in --dry-run,
 // since dry-run must not touch the machine). Returns null when unknown
 // (dry-run mode) so callers can skip the check instead of misreporting it.
@@ -122,5 +142,6 @@ module.exports = {
   scStop,
   scQuery,
   scQueryConfig,
+  scWaitForStopped,
   serviceExists,
 };

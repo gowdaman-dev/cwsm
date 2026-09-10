@@ -1,6 +1,6 @@
 const prompts = require('prompts');
 const kleur = require('kleur');
-const { scCreate, scConfig, scDelete, scStart, scStop, scQuery } = require('./sc');
+const { scCreate, scConfig, scDelete, scStart, scStop, scQuery, scWaitForStopped } = require('./sc');
 const { resolveServiceLogDir } = require('./env');
 const { promptLogon } = require('./logon');
 const { autoStartIfNeeded, START_FAILURE_HINT } = require('./autostart');
@@ -377,6 +377,7 @@ async function runRestartWizard({ dryRun } = {}) {
     } catch (_) {
       // Already stopped — fine to continue to start.
     }
+    await scWaitForStopped({ name }, { dryRun });
     await scStart({ name }, { dryRun });
     console.log(kleur.green(`\n✔ Service "${name}" restarted.`));
   } catch (err) {

@@ -7,6 +7,7 @@ const {
   scStart,
   scStop,
   scQuery,
+  scWaitForStopped,
   serviceExists,
 } = require('./sc');
 const { resolveServiceLogDir } = require('./env');
@@ -134,6 +135,7 @@ async function runConfigRestart(configPath, opts) {
       } catch (_) {
         // Already stopped — fine to continue to start.
       }
+      await scWaitForStopped({ name: service.name }, opts);
       await scStart({ name: service.name }, opts);
       ok(service.name, 'restarted');
     } catch (err) {
