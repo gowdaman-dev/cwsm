@@ -3,7 +3,7 @@
 // Used by cwsm.rc
 //
 #define IDC_STATIC (-1)
-#define IDI_CWSM                        101
+#define IDI_CWSM                        1
 #define IDD_INSTALL                     102
 #define IDD_REMOVE                      103
 #define IDD_EDIT                        104
