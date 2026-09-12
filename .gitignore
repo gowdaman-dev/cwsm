@@ -1,9 +1,31 @@
-node_modules/
-dist/
+# Visual Studio / MSBuild build output
+out/
+tmp/
+bin/
+obj/
+*.exe
+*.dll
+*.obj
+*.pdb
+*.ilk
+*.idb
+*.pch
+*.res
+*.tlb
+*.bsc
+*.sbr
+*.user
+*.suo
+*.ncb
+*.sdf
+*.opensdf
+.vs/
+
+# Generated build artifacts
+messages.h
+messages.rc
+MSG*.bin
+version.h.new
+
+# Logs
 *.log
-docs/usage-guide.html
-docs/*.pdf
-assets/*.exe
-service-host/ChronexaServiceHost/bin/
-service-host/ChronexaServiceHost/obj/
-service-host/ChronexaServiceHost/publish/
